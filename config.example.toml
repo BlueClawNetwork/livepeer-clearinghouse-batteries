@@ -4,11 +4,13 @@ DBPath = "clearinghouse.db"
 # Enable one or more serve components.
 EnableAuthWebhook = ":8080"
 # EnableManagementAPI = ":8081" # Management API on a separate port.
+# EnableReadAPI = ":8082"       # Cost read API for applications, on its own port.
+# EnableReadAPI = ":8082" # Cost read API on a separate port; needs a read token.
 EnableKafka = true
 EnableAccounting = true
 EnableOnchainListener = false
 
-# Required when the webhook, management API, or embedded Kafka is enabled.
+# Required when the webhook, management API, read API, or embedded Kafka is enabled.
 CredsFile = "/run/secrets/clearinghouse-creds.toml"
 # Non-loopback and wildcard HTTP binds additionally require UnsafeHTTPBind = true.
 # UnsafeHTTPBind = true

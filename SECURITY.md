@@ -10,6 +10,9 @@
 - Kafka needs a TLS TCP proxy; accounting can connect locally. SASL and HTTP
   credentials are still required. `--unsafe-http-bind` only permits a bind;
   it adds no TLS or access control.
+- The cost read API is read-only but exposes per-session usage and fees. Give
+  it its own port and a credential allowing only `cost.read`, and expose it to
+  applications through a terminating TLS proxy.
 - Health routes require no credentials. Restrict their exposure; `/readyz`
   checks the database and shutdown state, not accounting progress.
 

@@ -106,6 +106,7 @@ Enable one or more components:
 
 - `--enable-auth-webhook :PORT` — signer authorization;
 - `--enable-management-api :PORT` — account management HTTP API;
+- `--enable-read-api :PORT` — cost read HTTP API for applications;
 - `--enable-kafka` — embedded Kafka broker;
 - `--enable-accounting` — ticket accounting;
 - `--enable-onchain-listener` — on-chain reporting.
@@ -127,6 +128,17 @@ Set `--kafka-topic` to match the signer. External accounting uses plaintext TCP;
 configure the broker's users and permissions separately. If go-livepeer shares
 this broker, provide TLS for its producer and a private plaintext connection
 for accounting, both using the same cluster and topic.
+
+### Serve costs to applications
+
+`--enable-read-api :PORT` runs a read-only HTTP API on its own port for the
+applications that pay through the signer. Callers present a management
+credential allowing `cost.read` in `Livepeer-Clearinghouse-Token`.
+`GET /v1/cost/manifests/{manifest_id}` returns the accumulated cost of one
+manifest; `GET /v1/cost/events?after=<cursor>&limit=<n>` returns stored events
+in ingest order with `next_cursor`. `/livez` and `/readyz` need no credential.
+Keep the port separate from the webhook and management API, and expose it
+only through a terminating TLS proxy.
 
 ### Enable on-chain reporting
 
@@ -176,7 +188,7 @@ Service credentials authenticate management clients, signers, and Kafka clients.
 Gateway API keys authorize signing against allocations and are created separately.
 Local CLI commands use the database directly and need no service credentials.
 
-`--creds-file` is required for the management API, webhook, or embedded Kafka.
+`--creds-file` is required for the management API, read API, webhook, or embedded Kafka.
 Use [`creds.example.toml`](creds.example.toml) or
 [`creds.example.json`](creds.example.json); omit unused entries. Each entry has
 one `management`, `webhook`, or `kafka` block, a unique `id` (1–64 ASCII letters,
@@ -203,6 +215,7 @@ rejected. For reporting access, allow only the needed `read` permissions.
 | `api_keys` | `read`, `create`, `revoke` |
 | `sessions` | `read`, `revoke` |
 | `settlements`, `usage`, `ledger`, `escrow` | `read` |
+| `cost` | `read` (the read API's `/v1/cost/*`) |
 
 Creating a grant or allocation with nonzero funding needs both `create` and
 `fund`; allocation creation with `all` also needs `fund`. Zero or omitted
@@ -352,6 +365,41 @@ resource handlers also use JSON `error` strings:
 | `413` | Body exceeds 1 MiB. |
 | `415` | Unsupported or missing content type. |
 | `500` | Unexpected failure. |
+
+### Cost read HTTP API
+
+An application that pays for calls through the signer knows each call by the
+`manifest_id` the signer puts in every `create_signed_ticket` event. The read
+API answers what a manifest cost and serves a resumable feed of stored events,
+so applications do not consume the Kafka topic themselves. It is read-only and
+runs on its own port under its own token:
+
+```sh
+export CLEARINGHOUSE_READ_TOKEN='a-different-long-random-token'
+
+./bin/clearinghouse serve --enable-read-api :8082
+```
+
+The read token is required, must differ from the webhook token, and is sent in
+the `Livepeer-Clearinghouse-Token` header. The bind rules match the other HTTP
+servers: no default bind, loopback unless `--unsafe-http-bind`, and a port
+distinct from the webhook and management API. Requests without a valid token
+get 401.
+
+| Route | Returns |
+| --- | --- |
+| `GET /v1/cost/manifests/{manifest_id}` | The manifest's applied events summed: `event_count`, `ticket_count`, `fee_eth`, `fee_usd`, `billable_secs`, `sequence_first`, `sequence_last`, `first_signed_at_ms`, `last_signed_at_ms`, plus the payment session's `allocation_id`, `api_key_id`, `payment_session_id`, `app`, `orchestrator`, and `pm_session_id`. 404 when no applied event carries the id; 409 if a manifest ever spans payment sessions. `fee_usd` is empty when any event lacks a USD conversion. |
+| `GET /v1/cost/events?after=N&limit=M` | Stored events with `ingest_sequence` greater than `after` (default 0), in ingestion order, at most `limit` (1 to 1000, default 200), as `{"events": [...], "next_cursor": N}`. `next_cursor` is the last returned `ingest_sequence`, or `after` when the page is empty. |
+| `GET /livez`, `GET /readyz` | Health, as on the other servers. No token needed. |
+
+`ingest_sequence` is the accounting service's own dense sequence; Kafka
+`partition` and `offset` are included in each event but are not a total order
+across partitions. Every stored event appears in the feed with its `status`
+and `error`; only `applied` events carry `allocation_id`, `sequence_number`,
+`num_tickets`, and the session fields. Amounts follow the management API's
+conventions: `computed_fee_eth` and `computed_fee_usd` decimals, never wei.
+The feed makes no completeness claim; a metered session may still be emitting
+events for a manifest.
 
 ## Development
 

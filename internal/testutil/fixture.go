@@ -107,10 +107,24 @@ func AssertBalances(t *testing.T, db *store.Store) {
 // Event follows monitor.GatewayEvent and the existing remote_signer.go map exactly.
 func (f *Fixture) Event(t *testing.T, id, fee, pm string) []byte {
 	t.Helper()
+	return f.EventWith(t, id, fee, pm, nil)
+}
+
+// EventWith overrides or removes (nil value) data fields of a standard event.
+func (f *Fixture) EventWith(t *testing.T, id, fee, pm string, overrides map[string]any) []byte {
+	t.Helper()
 	now := time.Now().UTC()
-	b, err := json.Marshal(map[string]any{"id": id, "type": "create_signed_ticket", "timestamp": "1800000000000", "gateway": "signer.test", "data": map[string]any{
+	data := map[string]any{
 		"session_id": "state-1", "session_status": "new", "app": "test-app", "pipeline": "live", "request_id": "request-" + id, "orch_address": Orch, "orch_url": "https://orch.test", "manifest_id": "manifest-1", "pm_session_id": pm, "current_time": now, "current_time_unix": now.UnixMilli(), "previous_time": now.Add(-10 * time.Second), "previous_time_unix": now.Add(-10 * time.Second).UnixMilli(), "billable_secs": 10, "pixels": 0, "session_balance": "0", "computed_fee": fee, "cost": "1.0000000000", "sequence_number": 0, "num_tickets": 1, "auth_id": f.Session,
-	}})
+	}
+	for key, value := range overrides {
+		if value == nil {
+			delete(data, key)
+		} else {
+			data[key] = value
+		}
+	}
+	b, err := json.Marshal(map[string]any{"id": id, "type": "create_signed_ticket", "timestamp": "1800000000000", "gateway": "signer.test", "data": data})
 	require.NoError(t, err)
 	return b
 }
