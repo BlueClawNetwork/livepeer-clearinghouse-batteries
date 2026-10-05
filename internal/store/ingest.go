@@ -27,6 +27,7 @@ type SignedTicketEvent struct {
 	App             string      `json:"app"`
 	Pipeline        string      `json:"pipeline"`
 	RequestID       string      `json:"request_id"`
+	ManifestID      string      `json:"manifest_id"`
 	Orchestrator    string      `json:"orch_address"`
 	PMSessionID     string      `json:"pm_session_id"`
 	ComputedFee     string      `json:"computed_fee"`
@@ -131,7 +132,16 @@ func (s *Store) Ingest(ctx context.Context, topic string, partition int, offset 
 				}
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO usage_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uid, eventID, topic, partition, offset, raw, sessionID, ev.Pipeline, ev.RequestID, ev.Started, ev.Ended, string(ev.BillableSeconds), string(ev.Pixels), ev.ComputedFee, feeUSD, status, reason, now); err != nil {
+		// The manifest id is informational only; an oversized one is dropped
+		// rather than quarantined, mirroring the webhook's state_id bound.
+		if len(ev.ManifestID) > 256 {
+			ev.ManifestID = ""
+		}
+		var sequence int64
+		if err := tx.QueryRowContext(ctx, `SELECT coalesce(max(ingest_sequence),0)+1 FROM usage_events`).Scan(&sequence); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO usage_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uid, eventID, topic, partition, offset, raw, sessionID, ev.Pipeline, ev.RequestID, ev.Started, ev.Ended, string(ev.BillableSeconds), string(ev.Pixels), ev.ComputedFee, feeUSD, status, reason, now, ev.ManifestID, sequence); err != nil {
 			return err
 		}
 		outcome, detail = status, reason

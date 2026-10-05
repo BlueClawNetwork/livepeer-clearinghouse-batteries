@@ -80,7 +80,7 @@ func TestMigrationsConstraintsAndRoundTrip(t *testing.T) {
 		require.NoError(t, f.DB.DB.QueryRowContext(ctx, q).Scan(&metadata), q)
 		require.Equal(t, "", metadata, q)
 	}
-	for _, index := range []string{"allocations_grant", "keys_allocation", "sessions_allocation", "usage_status", "signing_match", "ledger_account", "ledger_transaction", "settlements_match", "settlements_block", "ticket_broker_events_block", "ticket_broker_events_sender"} {
+	for _, index := range []string{"allocations_grant", "keys_allocation", "sessions_allocation", "usage_status", "usage_ingest_sequence", "usage_manifest", "signing_match", "ledger_account", "ledger_transaction", "settlements_match", "settlements_block", "ticket_broker_events_block", "ticket_broker_events_sender"} {
 		var n int
 		require.NoError(t, f.DB.DB.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='index' AND name=?`, index).Scan(&n))
 		if n != 1 {
@@ -90,9 +90,22 @@ func TestMigrationsConstraintsAndRoundTrip(t *testing.T) {
 	require.NoError(t, migrations.Up(ctx, f.DB.DB))
 	list, err := migrations.List(ctx, f.DB.DB)
 	require.NoError(t, err)
-	if len(list) != 1 || !list[0].Applied {
+	if len(list) != 2 || !list[0].Applied || !list[1].Applied {
 		t.Fatal(list)
 	}
+	require.NoError(t, f.DB.Ingest(ctx, "test", 0, 0, f.Event(t, "before-down", "1", testutil.PM)))
+	require.NoError(t, migrations.Down(ctx, f.DB.DB))
+	for _, column := range []string{"manifest_id", "ingest_sequence"} {
+		var n int
+		require.NoError(t, f.DB.DB.QueryRow(`SELECT count(*) FROM pragma_table_info('usage_events') WHERE name=?`, column).Scan(&n))
+		require.Equal(t, 0, n, "migration down left column %s", column)
+	}
+	// Existing rows are numbered in insertion order when the migration is applied again.
+	require.NoError(t, migrations.Up(ctx, f.DB.DB))
+	var sequence int64
+	require.NoError(t, f.DB.DB.QueryRow(`SELECT ingest_sequence FROM usage_events WHERE event_id='before-down'`).Scan(&sequence))
+	require.Equal(t, int64(1), sequence)
+	require.NoError(t, migrations.Down(ctx, f.DB.DB))
 	require.NoError(t, migrations.Down(ctx, f.DB.DB))
 	require.NoError(t, migrations.Up(ctx, f.DB.DB))
 	var count int

@@ -17,6 +17,7 @@ func TestFailedMetadataWriteRollsBackEntireMigration(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	require.NoError(t, migrations.Down(ctx, db.DB))
+	require.NoError(t, migrations.Down(ctx, db.DB))
 	_, err = db.DB.Exec(`CREATE TRIGGER fail_metadata BEFORE INSERT ON migrations BEGIN SELECT RAISE(ABORT,'fixture failure'); END`)
 	require.NoError(t, err)
 	if err := migrations.Up(ctx, db.DB); err == nil {
@@ -32,7 +33,7 @@ func TestFailedMetadataWriteRollsBackEntireMigration(t *testing.T) {
 	require.NoError(t, migrations.Up(ctx, db.DB))
 	status, err := migrations.List(ctx, db.DB)
 	require.NoError(t, err)
-	if len(status) != 1 || status[0].Version != 1 || status[0].Filename != "001_initial.sql" || len(status[0].SHA256) != 64 || status[0].AppliedAtMS == nil || !status[0].Applied {
+	if len(status) != 2 || status[0].Version != 1 || status[0].Filename != "001_initial.sql" || len(status[0].SHA256) != 64 || status[0].AppliedAtMS == nil || !status[0].Applied || status[1].Filename != "002_manifest.sql" || !status[1].Applied {
 		t.Fatal(status)
 	}
 	require.NoError(t, db.DB.QueryRow(`SELECT count(*) FROM account_balances`).Scan(&n))
@@ -45,7 +46,11 @@ func TestFailedMetadataWriteRollsBackEntireMigration(t *testing.T) {
 		t.Fatal(appliedAt)
 	}
 	require.NoError(t, migrations.Down(ctx, db.DB))
-	if status, err := migrations.List(ctx, db.DB); err != nil || len(status) != 1 || status[0].Applied {
+	if status, err := migrations.List(ctx, db.DB); err != nil || len(status) != 2 || !status[0].Applied || status[1].Applied {
+		t.Fatal(status, err)
+	}
+	require.NoError(t, migrations.Down(ctx, db.DB))
+	if status, err := migrations.List(ctx, db.DB); err != nil || len(status) != 2 || status[0].Applied || status[1].Applied {
 		t.Fatal(status, err)
 	}
 	require.NoError(t, db.DB.QueryRow(`SELECT count(*) FROM sqlite_master WHERE name='account_balances'`).Scan(&n))

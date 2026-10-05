@@ -24,6 +24,7 @@ var managementPermissions = []string{
 	"usage.*", "usage.read",
 	"ledger.*", "ledger.read",
 	"escrow.*", "escrow.read",
+	"cost.*", "cost.read",
 }
 
 type entry struct {

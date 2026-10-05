@@ -27,3 +27,10 @@ secret = ""
 [credentials.kafka]
 username = "producer"
 allow = ["write"]
+
+# An application reading costs through --enable-read-api.
+[[credentials]]
+id = "application"
+secret = ""
+[credentials.management]
+allow = ["cost.read"]

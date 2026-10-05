@@ -21,14 +21,14 @@ func TestTOMLCredsFile(t *testing.T) {
 	data, err := os.ReadFile("../../creds.example.toml")
 	require.NoError(t, err)
 	contents := string(data)
-	for _, secret := range []string{"operator-secret", "signer-secret", "read-secret", "write-secret"} {
+	for _, secret := range []string{"operator-secret", "signer-secret", "read-secret", "write-secret", "application-secret"} {
 		contents = strings.Replace(contents, `secret = ""`, `secret = "`+secret+`"`, 1)
 	}
 	path := filepath.Join(t.TempDir(), "creds.toml")
 	require.NoError(t, os.WriteFile(path, []byte(contents), 0600))
 	registry, err := serviceauth.Load(path)
 	require.NoError(t, err)
-	require.Equal(t, 1, registry.Count("management"))
+	require.Equal(t, 2, registry.Count("management"), "the operator and the cost-reading application")
 	require.Equal(t, 1, registry.Count("webhook"))
 	p := ServeParams{EnableKafka: true, EnableAccounting: true}
 	access, dialer, err := p.kafkaSecurity(registry)

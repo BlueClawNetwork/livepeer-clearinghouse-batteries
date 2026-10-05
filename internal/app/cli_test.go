@@ -92,6 +92,11 @@ func TestCLIManagementAndSecretOnce(t *testing.T) {
 	if err := Execute(context.Background(), []string{"allocation", "set-status", "--id", a, "--status", "active"}, &out, &out); err == nil {
 		t.Fatal("reopened revoked allocation")
 	}
+	// Each down rolls back one migration; only the initial one holds accounting data.
+	cli(t, "migrate", "down")
+	if got := strings.TrimSpace(cli(t, "grant", "list")); got == "[]" {
+		t.Fatal("rolling back the manifest migration destroyed grants")
+	}
 	cli(t, "migrate", "down")
 	cli(t, "migrate", "up")
 	if got := strings.TrimSpace(cli(t, "grant", "list")); got != "[]" {
@@ -186,13 +191,13 @@ func TestBoaConfigEnvironmentValidationAndHelp(t *testing.T) {
 		}
 	}
 	help := cli(t, "serve", "--help")
-	for _, want := range []string{"--enable-auth-webhook string", "--unsafe-http-bind", "CLEARINGHOUSE_UNSAFE_HTTP_BIND", "--enable-kafka", "--enable-onchain-listener", "Run on-chain RPC listener", "--ticket-broker", "--start-block", "--config-file", "Configuration file", "CLEARINGHOUSE_DB_PATH", "CLEARINGHOUSE_TICKET_BROKER", "--creds-file", "CLEARINGHOUSE_CREDS_FILE", "--rpc-url-file", "CLEARINGHOUSE_RPC_URL_FILE"} {
+	for _, want := range []string{"--enable-auth-webhook string", "--enable-read-api string", "--unsafe-http-bind", "CLEARINGHOUSE_UNSAFE_HTTP_BIND", "--enable-kafka", "--enable-onchain-listener", "Run on-chain RPC listener", "--ticket-broker", "--start-block", "--config-file", "Configuration file", "CLEARINGHOUSE_DB_PATH", "CLEARINGHOUSE_TICKET_BROKER", "--creds-file", "CLEARINGHOUSE_CREDS_FILE", "--rpc-url-file", "CLEARINGHOUSE_RPC_URL_FILE"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("help missing %s", want)
 		}
 	}
 	for _, line := range strings.Split(help, "\n") {
-		if strings.Contains(line, "--webhook-token ") || strings.Contains(line, "--rpc-url ") {
+		if strings.Contains(line, "--webhook-token ") || strings.Contains(line, "--read-token ") || strings.Contains(line, "--rpc-url ") {
 			t.Fatalf("direct secret flag exposed in help: %s", line)
 		}
 	}

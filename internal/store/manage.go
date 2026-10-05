@@ -386,7 +386,7 @@ func (s *Store) List(ctx context.Context, kind, id string) ([]map[string]any, er
 		"grant": `SELECT * FROM grants`, "allocation": `SELECT * FROM grant_allocations`,
 		"api-key": `SELECT id,allocation_id,name,prefix,created_at_ms,last_used_at_ms,revoked_at_ms FROM api_keys`,
 		"session": `SELECT * FROM payment_sessions`, "settlement": `SELECT * FROM settlements`,
-		"usage": `SELECT id,event_id,topic,partition,offset,status,error,computed_fee_wei,computed_fee_usd,created_at_ms,
+		"usage": `SELECT id,event_id,topic,partition,offset,ingest_sequence,manifest_id,status,error,computed_fee_wei,computed_fee_usd,created_at_ms,
  (SELECT a.currency FROM payment_sessions s JOIN grant_allocations a ON a.id=s.allocation_id WHERE s.id=usage_events.payment_session_id) AS currency
  FROM usage_events`,
 	}
